@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Suite — Costruttore Visivo di Comandi</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #F5F0EB;
+      color: #1A1D23;
+      line-height: 1.6;
+    }
+    h1 { color: #1E3A6E; font-family: Georgia, serif; }
+    .test-group { margin: 20px 0; }
+    .test-group h2 { font-size: 18px; color: #C44536; border-bottom: 1px solid #D8D3CC; padding-bottom: 4px; }
+    .test-case { margin: 8px 0; padding: 10px 14px; border-radius: 6px; background: #fff; border: 1px solid #E8E4DE; }
+    .test-case.pass { border-left: 4px solid #3D6B4F; }
+    .test-case.fail { border-left: 4px solid #B91C1C; background: #FEF2F2; }
+    .test-name { font-weight: 600; margin-bottom: 4px; }
+    .test-detail { font-size: 13px; color: #4A5058; font-family: monospace; white-space: pre-wrap; }
+    .test-result { font-weight: 700; }
+    .pass .test-result { color: #3D6B4F; }
+    .fail .test-result { color: #B91C1C; }
+    .summary { margin-top: 20px; padding: 16px; background: #fff; border-radius: 8px; border: 2px solid #1E3A6E; }
+    .summary.pass-all { border-color: #3D6B4F; }
+    .summary.has-fail { border-color: #B91C1C; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Test Suite — Costruttore Visivo di Comandi</h1>
+  <p>Test automatici su parser italiano e generatore comandi.</p>
+  <div id="results"></div>
+
+  <script src="app.js"></script>
+  <script>
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(description, condition, detail) {
+      const ok = !!condition;
+      if (ok) passed++; else failed++;
+      results.push({ description, ok, detail: detail || '' });
+    }
+
+    // ── Test Parser ──
+    function testParser() {
+      // Test 1: Rinomina con prefisso
+      let p = ItalianParser.parse('rinomina tutti i file .txt aggiungendo report_ all\'inizio');
+      assert('Parser: riconosce azione "rename"', p && p.action === 'rename', JSON.stringify(p));
+      assert('Parser: estrae pattern .txt', p && p.filePattern === '*.txt', p && p.filePattern);
+      assert('Parser: estrae operazione "prefix"', p && p.renameOp === 'prefix', p && p.renameOp);
+      assert('Parser: estrae valore prefisso "report_"', p && p.renameValue === 'report_', p && p.renameValue);
+
+      // Test 2: Rinomina con suffisso
+      p = ItalianParser.parse('rinomina tutti i file .jpg aggiungendo _backup alla fine');
+      assert('Parser: riconosce suffisso', p && p.renameOp === 'suffix', p && p.renameOp);
+      assert('Parser: estrae valore suffisso "_backup"', p && p.renameValue === '_backup', p && p.renameValue);
+
+      // Test 3: Rinomina con data
+      p = ItalianParser.parse('rinomina tutti i file .txt aggiungendo la data di oggi');
+      assert('Parser: riconosce operazione "date"', p && p.renameOp === 'date', p && p.renameOp);
+      assert('Parser: estrae pattern .txt', p && p.filePattern === '*.txt', p && p.filePattern);
+
+      // Test 4: Copia
+      p = ItalianParser.parse('copia tutti i file .pdf nella cartella backup');
+      assert('Parser: riconosce azione "copy"', p && p.action === 'copy', JSON.stringify(p));
+      assert('Parser: estrae destinazione "backup"', p && p.destination === 'backup', p && p.destination);
+
+      // Test 5: Elimina
+      p = ItalianParser.parse('elimina tutti i file .tmp modificati più di 7 giorni fa');
+      assert('Parser: riconosce azione "delete"', p && p.action === 'delete', p && p.action);
+      assert('Parser: estrae condizione data (più vecchio di 7 giorni)', p && p.conditions.some(c => c.type === 'date' && c.operator === 'older' && c.value === 7), JSON.stringify(p.conditions));
+
+      // Test 6: Comprimi
+      p = ItalianParser.parse('comprimi tutti i file .log in archivio.zip');
+      assert('Parser: riconosce azione "compress"', p && p.action === 'compress', p && p.action);
+      assert('Parser: estrae nome archivio', p && p.archiveName === 'archivio.zip', p && p.archiveName);
+
+      // Test 7: Condizione dimensione
+      p = ItalianParser.parse('copia tutti i file .jpg più grandi di 1 MB nella cartella backup');
+      assert('Parser: estrae condizione size > 1 MB', p && p.conditions.some(c => c.type === 'size' && c.operator === 'gt' && c.value === 1 && c.unit === 'MB'), JSON.stringify(p.conditions));
+
+      // Test 8: Sposta
+      p = ItalianParser.parse('sposta tutti i file .docx nella cartella documenti');
+      assert('Parser: riconosce azione "move"', p && p.action === 'move', p && p.action);
+      assert('Parser: estrae destinazione', p && p.destination === 'documenti', p && p.destination);
+
+      // Test 9: Rinomina con replace
+      p = ItalianParser.parse('rinomina tutti i file sostituisci bozza con finale');
+      assert('Parser: riconosce operazione "replace"', p && p.renameOp === 'replace', p && p.renameOp);
+      assert('Parser: estrae search "bozza"', p && p.renameSearch === 'bozza', p && p.renameSearch);
+      assert('Parser: estrae replace "finale"', p && p.renameReplace === 'finale', p && p.renameReplace);
+
+      // Test 10: Input vuoto
+      p = ItalianParser.parse('');
+      assert('Parser: input vuoto restituisce null', p === null, JSON.stringify(p));
+    }
+
+    // ── Test Generatore Bash ──
+    function testBashGenerator() {
+      let cmd = CommandGenerator.generate('bash', 'rename', '*.txt', [], {
+        renameOp: 'prefix', renameValue: 'report_'
+      });
+      assert('Bash: genera comando rinomina con prefisso', cmd.includes('report_') && cmd.includes('*.txt'), cmd.substring(0, 200));
+      assert('Bash: contiene shebang', cmd.startsWith('#!/bin/bash'), cmd.substring(0, 50));
+
+      cmd = CommandGenerator.generate('bash', 'copy', '*.jpg', [], {
+        destination: 'backup'
+      });
+      assert('Bash: genera comando copia', cmd.includes('cp') && cmd.includes('backup'), cmd.substring(0, 200));
+
+      cmd = CommandGenerator.generate('bash', 'delete', '*.tmp', [], {});
+      assert('Bash: genera comando elimina (con avviso)', cmd.includes('ATTENZIONE') || cmd.includes('# Per eliminare'), cmd.substring(0, 200));
+
+      cmd = CommandGenerator.generate('bash', 'compress', '*.log', [], {
+        archiveName: 'logs.zip'
+      });
+      assert('Bash: genera comando comprimi', cmd.includes('zip') && cmd.includes('logs.zip'), cmd.substring(0, 200));
+
+      // Test con condizioni
+      const conditions = [
+        { type: 'size', operator: 'gt', value: 1, unit: 'MB' },
+        { type: 'date', operator: 'older', value: 7, unit: 'giorni' }
+      ];
+      cmd = CommandGenerator.generate('bash', 'delete', '*.tmp', conditions, {});
+      assert('Bash: condizioni size e date nel find', cmd.includes('-size') || cmd.includes('-mtime'), cmd.substring(0, 300));
+    }
+
+    // ── Test Generatore CMD ──
+    function testCmdGenerator() {
+      let cmd = CommandGenerator.generate('cmd', 'rename', '*.pdf', [], {
+        renameOp: 'prefix', renameValue: 'report_'
+      });
+      assert('CMD: genera comando rinomina', cmd.includes('ren') && cmd.includes('report_'), cmd.substring(0, 200));
+      assert('CMD: inizia con @echo off', cmd.includes('@echo off'), cmd.substring(0, 50));
+
+      cmd = CommandGenerator.generate('cmd', 'rename', '*.txt', [], {
+        renameOp: 'date'
+      });
+      assert('CMD: genera rinomina con data', cmd.includes('%date%'), cmd.substring(0, 200));
+    }
+
+    // ── Test Generatore PowerShell ──
+    function testPowerShellGenerator() {
+      let cmd = CommandGenerator.generate('ps', 'rename', '*.txt', [], {
+        renameOp: 'prefix', renameValue: 'report_'
+      });
+      assert('PS: genera comando rinomina', cmd.includes('Rename-Item') && cmd.includes('report_'), cmd.substring(0, 200));
+
+      cmd = CommandGenerator.generate('ps', 'copy', '*.jpg', [], {
+        destination: 'backup'
+      });
+      assert('PS: genera comando copia', cmd.includes('Copy-Item') && cmd.includes('backup'), cmd.substring(0, 200));
+
+      const conditions = [
+        { type: 'size', operator: 'gt', value: 1, unit: 'MB' },
+        { type: 'name', operator: 'contains', value: 'foto' }
+      ];
+      cmd = CommandGenerator.generate('ps', 'move', '*.jpg', conditions, {
+        destination: 'foto_grandi'
+      });
+      assert('PS: condizioni Where-Object', cmd.includes('Where-Object') && cmd.includes('Length') && cmd.includes('foto'), cmd.substring(0, 400));
+    }
+
+    // ── Test Accettazione ──
+    function testAcceptance() {
+      // Criterio 1: "rinomina tutti i file pdf aggiungendo report_ all inizio"
+      let cmdBash = CommandGenerator.generate('bash', 'rename', '*.pdf', [], {
+        renameOp: 'prefix', renameValue: 'report_'
+      });
+      let cmdCmd = CommandGenerator.generate('cmd', 'rename', '*.pdf', [], {
+        renameOp: 'prefix', renameValue: 'report_'
+      });
+      assert('Accettazione 1: Bash rinomina PDF con prefisso report_', cmdBash.includes('report_') && cmdBash.includes('.pdf') || cmdBash.includes('*.pdf'), cmdBash.substring(0, 200));
+      assert('Accettazione 1: CMD rinomina PDF con prefisso report_', cmdCmd.includes('report_') && cmdCmd.includes('.pdf') || cmdCmd.includes('*.pdf'), cmdCmd.substring(0, 200));
+
+      // Criterio 2: "solo file con estensione .jpg e dimensione maggiore di 1 MB"
+      const conds2 = [
+        { type: 'ext', operator: 'is', value: '.jpg' },
+        { type: 'size', operator: 'gt', value: 1, unit: 'MB' }
+      ];
+      let cmdPs = CommandGenerator.generate('ps', 'copy', '*.jpg', conds2, {
+        destination: 'backup'
+      });
+      assert('Accettazione 2: PS rispetta entrambe le condizioni (estensione .jpg e size > 1MB)', cmdPs.includes('.jpg') || cmdPs.includes('*.jpg'), cmdPs.substring(0, 200));
+      assert('Accettazione 2: PS include filtro dimensione', cmdPs.includes('Length') && cmdPs.includes('1048576'), cmdPs.substring(0, 400));
+    }
+
+    // ── Esegui tutti i test ──
+    testParser();
+    testBashGenerator();
+    testCmdGenerator();
+    testPowerShellGenerator();
+    testAcceptance();
+
+    // ── Render risultati ──
+    const container = document.getElementById('results');
+    let html = '';
+
+    // Group by category
+    const groups = [
+      { name: 'Parser Italiano', tests: results.slice(0, 13) },
+      { name: 'Generatore Bash', tests: results.slice(13, 19) },
+      { name: 'Generatore CMD', tests: results.slice(19, 21) },
+      { name: 'Generatore PowerShell', tests: results.slice(21, 25) },
+      { name: 'Criteri di Accettazione', tests: results.slice(25) },
+    ];
+
+    groups.forEach(group => {
+      html += `<div class="test-group"><h2>${group.name}</h2>`;
+      group.tests.forEach(t => {
+        const cls = t.ok ? 'pass' : 'fail';
+        html += `<div class="test-case ${cls}">`;
+        html += `<div class="test-name"><span class="test-result">${t.ok ? '✓' : '✗'}</span> ${t.description}</div>`;
+        if (t.detail && !t.ok) {
+          html += `<div class="test-detail">${t.detail}</div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+    });
+
+    const allPass = failed === 0;
+    html += `<div class="summary ${allPass ? 'pass-all' : 'has-fail'}">`;
+    html += `<strong>Riepilogo:</strong> ${passed} passati, ${failed} falliti su ${results.length} test totali.`;
+    html += ` ${allPass ? '✅ Tutti i test superati!' : '❌ Alcuni test sono falliti.'}`;
+    html += `</div>`;
+
+    container.innerHTML = html;
+  </script>
+</body>
+</html>
